@@ -123,14 +123,15 @@ export class LandingPageComponent {
   private marqueeLastTickMs = 0;
 
   private readonly heroMedia = viewChild<ElementRef<HTMLElement>>('heroMedia');
+  private readonly filmSection = viewChild<ElementRef<HTMLElement>>('filmSection');
+  private readonly makeVideoEl = viewChild<ElementRef<HTMLVideoElement>>('makeVideo');
+  private readonly doneVideoEl = viewChild<ElementRef<HTMLVideoElement>>('doneVideo');
   private readonly lottieBackTop = viewChild<ElementRef<HTMLElement>>('lottieBackTop');
+  private filmVideoObserver: IntersectionObserver | undefined;
 
   readonly showMakeVideo = computed(() => !!SITE_CONFIG.media.videoMake?.trim());
   readonly showDoneVideo = computed(() => !!SITE_CONFIG.media.videoDone?.trim());
   readonly hasLocalVideos = computed(() => this.showMakeVideo() || this.showDoneVideo());
-
-  readonly makeVideoReady = signal(false);
-  readonly doneVideoReady = signal(false);
 
   readonly backToTopFx = signal(false);
   private backToTopFxTimer: ReturnType<typeof setTimeout> | undefined;
@@ -142,6 +143,7 @@ export class LandingPageComponent {
       this.initScrollReveals(this.host.nativeElement);
       this.applyHeroParallax();
       this.initMarqueeScroll();
+      this.initFilmVideos();
     });
     this.destroyRef.onDestroy(() => {
       if (this.scrollRafId !== 0) {
@@ -156,6 +158,8 @@ export class LandingPageComponent {
       }
       this.marqueeResizeObserver?.disconnect();
       this.marqueeResizeObserver = undefined;
+      this.filmVideoObserver?.disconnect();
+      this.filmVideoObserver = undefined;
       this.destroyLottie();
     });
   }
@@ -205,12 +209,11 @@ export class LandingPageComponent {
     this.comparePosition.set(0);
   }
 
-  onMakeVideoLoaded(): void {
-    this.makeVideoReady.set(true);
-  }
-
-  onDoneVideoLoaded(): void {
-    this.doneVideoReady.set(true);
+  onFilmVideoReady(event: Event): void {
+    const v = event.target;
+    if (v instanceof HTMLVideoElement) {
+      this.primeFilmVideoFrame(v);
+    }
   }
 
   lockVideoMuted(event: Event): void {
@@ -324,6 +327,77 @@ export class LandingPageComponent {
     };
 
     this.scrollRafId = requestAnimationFrame(step);
+  }
+
+  private initFilmVideos(): void {
+    const primeAll = (): void => {
+      const make = this.makeVideoEl()?.nativeElement;
+      const done = this.doneVideoEl()?.nativeElement;
+      if (make) this.primeFilmVideoFrame(make);
+      if (done) this.primeFilmVideoFrame(done);
+    };
+
+    queueMicrotask(primeAll);
+    requestAnimationFrame(primeAll);
+
+    const section = this.filmSection()?.nativeElement;
+    if (!section || typeof IntersectionObserver === 'undefined') return;
+
+    this.filmVideoObserver?.disconnect();
+    this.filmVideoObserver = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        primeAll();
+      },
+      { threshold: 0.12, rootMargin: '80px 0px' },
+    );
+    this.filmVideoObserver.observe(section);
+  }
+
+  /** Paint first frame on mobile (iOS often waits for user tap before loadeddata). */
+  private primeFilmVideoFrame(video: HTMLVideoElement): void {
+    if (video.dataset['framePrimed'] === '1') return;
+
+    video.muted = true;
+    video.defaultMuted = true;
+    video.volume = 0;
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', '');
+    video.preload = 'auto';
+
+    const markPrimed = (): void => {
+      video.dataset['framePrimed'] = '1';
+      try {
+        if (video.readyState >= 2 && video.currentTime < 0.01) {
+          video.currentTime = 0.05;
+        }
+      } catch {
+        /* ignore seek errors */
+      }
+    };
+
+    const tryPlayPause = (): void => {
+      const playAttempt = video.play();
+      if (!playAttempt) {
+        markPrimed();
+        return;
+      }
+      playAttempt
+        .then(() => {
+          video.pause();
+          markPrimed();
+        })
+        .catch(() => markPrimed());
+    };
+
+    if (video.readyState >= 2) {
+      markPrimed();
+      tryPlayPause();
+    } else {
+      video.load();
+      video.addEventListener('loadeddata', () => tryPlayPause(), { once: true });
+    }
   }
 
   private updateCompareFromClientX(clientX: number): void {

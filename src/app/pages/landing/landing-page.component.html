@@ -194,7 +194,7 @@
     </div>
   </section>
 
-  <section class="film" id="film">
+  <section class="film" id="film" #filmSection>
     <div class="shell film__inner">
       <div class="film__copy" data-reveal data-reveal-delay="0">
         <p class="eyebrow">Field footage</p>
@@ -214,16 +214,20 @@
           <div class="film__dual">
             @if (showMakeVideo()) {
               <figure class="film__vid">
-                <div class="frame frame--video" [class.frame--loaded]="makeVideoReady()">
+                <div class="frame frame--video">
                   <video
+                    #makeVideo
                     [src]="site.media.videoMake"
                     controls
                     playsinline
+                    attr.webkit-playsinline=""
                     muted
                     defaultMuted
-                    preload="metadata"
+                    preload="auto"
                     title="Dr. Scrub — on-site floor care process (no audio)"
-                    (loadeddata)="onMakeVideoLoaded(); lockVideoMuted($event)"
+                    (loadedmetadata)="onFilmVideoReady($event)"
+                    (loadeddata)="onFilmVideoReady($event)"
+                    (canplay)="onFilmVideoReady($event)"
                     (play)="lockVideoMuted($event)"
                     (volumechange)="lockVideoMuted($event)"
                   >
@@ -234,16 +238,20 @@
             }
             @if (showDoneVideo()) {
               <figure class="film__vid">
-                <div class="frame frame--video" [class.frame--loaded]="doneVideoReady()">
+                <div class="frame frame--video">
                   <video
+                    #doneVideo
                     [src]="site.media.videoDone"
                     controls
                     playsinline
+                    attr.webkit-playsinline=""
                     muted
                     defaultMuted
-                    preload="metadata"
+                    preload="auto"
                     title="Dr. Scrub — completed floor finish (no audio)"
-                    (loadeddata)="onDoneVideoLoaded(); lockVideoMuted($event)"
+                    (loadedmetadata)="onFilmVideoReady($event)"
+                    (loadeddata)="onFilmVideoReady($event)"
+                    (canplay)="onFilmVideoReady($event)"
                     (play)="lockVideoMuted($event)"
                     (volumechange)="lockVideoMuted($event)"
                   >
