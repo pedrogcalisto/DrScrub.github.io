@@ -209,13 +209,6 @@ export class LandingPageComponent {
     this.comparePosition.set(0);
   }
 
-  onFilmVideoReady(event: Event): void {
-    const v = event.target;
-    if (v instanceof HTMLVideoElement) {
-      this.primeFilmVideoFrame(v);
-    }
-  }
-
   lockVideoMuted(event: Event): void {
     const v = event.target;
     if (!(v instanceof HTMLVideoElement)) return;
@@ -354,7 +347,7 @@ export class LandingPageComponent {
     this.filmVideoObserver.observe(section);
   }
 
-  /** Paint first frame on mobile (iOS often waits for user tap before loadeddata). */
+  /** Show first frame: seek on desktop; brief play+pause only on touch devices (iOS). */
   private primeFilmVideoFrame(video: HTMLVideoElement): void {
     if (video.dataset['framePrimed'] === '1') return;
 
@@ -366,37 +359,50 @@ export class LandingPageComponent {
     video.setAttribute('webkit-playsinline', '');
     video.preload = 'auto';
 
-    const markPrimed = (): void => {
-      video.dataset['framePrimed'] = '1';
+    const isTouchUi = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+    const seekToPreview = (): void => {
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
       try {
-        if (video.readyState >= 2 && video.currentTime < 0.01) {
-          video.currentTime = 0.05;
+        const target = video.duration > 0 ? Math.min(0.25, video.duration * 0.02) : 0.1;
+        if (video.currentTime < target - 0.02) {
+          video.currentTime = target;
         }
       } catch {
         /* ignore seek errors */
       }
     };
 
-    const tryPlayPause = (): void => {
+    const finish = (): void => {
+      video.dataset['framePrimed'] = '1';
+    };
+
+    const afterBuffered = (): void => {
+      seekToPreview();
+
+      if (!isTouchUi) {
+        finish();
+        return;
+      }
+
       const playAttempt = video.play();
       if (!playAttempt) {
-        markPrimed();
+        finish();
         return;
       }
       playAttempt
         .then(() => {
           video.pause();
-          markPrimed();
+          seekToPreview();
+          finish();
         })
-        .catch(() => markPrimed());
+        .catch(() => finish());
     };
 
-    if (video.readyState >= 2) {
-      markPrimed();
-      tryPlayPause();
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      afterBuffered();
     } else {
-      video.load();
-      video.addEventListener('loadeddata', () => tryPlayPause(), { once: true });
+      video.addEventListener('loadeddata', afterBuffered, { once: true });
     }
   }
 
